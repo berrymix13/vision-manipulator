@@ -1,0 +1,31 @@
+{
+  "R_ee2cam": [
+    [
+      -0.073,
+      0.018,
+      0.997
+    ],
+    [
+      -0.941,
+      -0.331,
+      0.063
+    ],
+    [
+      -0.329,
+      0.943,
+      -0.041
+    ]
+  ],
+  "t_ee2cam": [
+    0.0418,
+    -0.0019,
+    -0.0239
+  ],
+  "num_poses": 50,
+  "timestamp": "2025-07-28T17:01:53.401679",
+  "description": "End-Effector -> \uce74\uba54\ub77c \ubcc0\ud658 \ud589\ub82c (Eye-in-Hand calibration, \ubbf8\ud130 \ub2e8\uc704)",
+  "coordinate_transformation": {
+    "applied": false,
+    "description": "\uc88c\ud45c\ucd95 \ubcc0\ud658 \uc5c6\uc74c - OpenCV \uae30\ubcf8 \uc88c\ud45c\uacc4 \uc0ac\uc6a9"
+  }
+}

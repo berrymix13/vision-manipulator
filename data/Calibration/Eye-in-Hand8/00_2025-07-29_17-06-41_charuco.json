@@ -1,0 +1,32 @@
+{
+  "rvec": [
+    [
+      0.5524179575880415
+    ],
+    [
+      0.1975890767791568
+    ],
+    [
+      -0.4283782429683997
+    ]
+  ],
+  "tvec": [
+    [
+      -0.1830162587267531
+    ],
+    [
+      -0.2208005629373337
+    ],
+    [
+      0.25796606246818976
+    ]
+  ],
+  "pose_index": 0,
+  "timestamp": "2025-07-29_17-06-41",
+  "charuco_corners_count": 7,
+  "charuco_ids_count": 7,
+  "distance_mm": 385.73867959685253,
+  "quality_score": 0.40900636681443153,
+  "reprojection_error_pixels": 0.8063991665840149,
+  "detection_method": "charuco_corners"
+}
