@@ -1,7 +1,6 @@
 # vision-manipulator
 
-````markdown
-# 🤖 Vision Manipulator
+## 🤖 Vision Manipulator
 
 > **Vision + Robot Arm 통합 시스템 개발 프로젝트**  
 > YOLO 기반 객체 탐지, 키포인트 추출, 좌표 변환, Grasp 수행까지 이어지는 end-to-end 로봇 비전 자동화 시스템입니다.
@@ -21,7 +20,7 @@
 
 ---
 
-## 🗂️ 디렉토리 구조
+### 🗂️ 디렉토리 구조
 
 ```bash
 vision-manipulator/
@@ -32,7 +31,7 @@ vision-manipulator/
 ├── main_executor.py   # 메인 실행 코드
 ├── README.md
 └── .gitignore
-````
+```
 
 ---
 
