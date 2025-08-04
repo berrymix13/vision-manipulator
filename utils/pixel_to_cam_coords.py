@@ -7,7 +7,7 @@ from typing import Tuple, List, Optional
 # results[0].show()
 def detect_objects(c_path, d_path, target_list, 
                    camera_matrix, dist_coeffs,  
-                   best_model = "/home/ros/llm_robot/yolo11x.pt"):
+                   best_model = "/home/ros/llm_robot/yolo/yolo11x.pt"):
     
     depth_raw  = np.load(d_path)
     depth_scale = 0.001    # mm -> m
