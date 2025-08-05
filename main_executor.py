@@ -7,6 +7,7 @@ from utils.command_parser import parse_command
 from utils.pixel_to_cam_coords import detect_objects, get_clicked_point_cam_xyz
 from utils.camera import capture_d455_images, load_intrinsics
 from utils.cam_to_base import cam2base
+from utils.grasp_orientation import create_pcd_from_depth, segment_plane_from_pointcloud, pcd_to_surface_normal
 from utils.robot_action import move_to_object
 
 
@@ -56,11 +57,18 @@ def run():
     
     cam_xyz = yolo_outputs[0]["cam_xyz"]
     
+    # 
+    pcd = create_pcd_from_depth(d_path, intr_path, yolo_outputs)
+    pcd = segment_plane_from_pointcloud(pcd)
+    rotation_matrix, yaw_angle = pcd_to_surface_normal(pcd)
+    
+    
     # 선택된 좌표를 hand-eye calibration결과를 활용해 변환
-    base_xyz_mm = cam2base(cam_xyz, coords, ee2cam_path)
+    base_coords = cam2base(cam_xyz, coords, rotation_matrix, yaw_angle, 
+                        ee2cam_path, ee2cam = False)
 
     # 현재 로봇 환경에 맞는 Hard Coding 추가 후 이동
-    move_to_object(mc, base_xyz_mm, gripper_length_mm=GRIPPER_LENGTH_MM)
+    # move_to_object(mc, base_xyz_mm, gripper_length_mm=GRIPPER_LENGTH_MM)
     
 
 
