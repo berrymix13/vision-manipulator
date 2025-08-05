@@ -3,6 +3,7 @@
 data/captures/color/*.jpg
 data/captures/depth/*.npy
 data/captures/intrinsics/*.json
+data/Calibration/Eye-in-Hand2/merged_target_pcd.ply
 
 !data/captures/color/2025-07-30_10-21-03.jpg
 !data/captures/depth/2025-07-30_10-21-03.npy
