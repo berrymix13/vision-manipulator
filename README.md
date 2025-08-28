@@ -49,61 +49,58 @@ vision-manipulator/
 <table align="center" style="text-align: center;">
   <thead>
     <tr>
-      <th><b>Eye‑in‑Hand 카메라 장착</b></th>
-      <th><b>로봇팔 전체 모습</b></th>
+      <th><b>Eye‑to‑Hand Environment</b></th>
+      <th><b>Calibration target(Camera View)</b></th>
     </tr>
   </thead>
   <tbody>
     <tr>
       <td>
-        <img src="./data/asset/Environment2.png" height="350" align="center" />
+        <img src="./data/asset/Environment4.jpg" height="300" align="center" />
       </td>
       <td>
-        <img src="./data/asset/Environment3.png" height="350" align="center" />
+        <img src="./data/asset/charuco_board.jpg" height="300" align="center" />
       </td>
-    </tr>
-    <tr>
-      <td>브래킷 추가 제작 후 End‑Effector에 장착</td>
-      <td>depth 정확도 개선을 위한 높이 추가</td>
     </tr>
   </tbody>
 </table>
 
-* **사용 로봇 하드웨어**
+* **사용 하드웨어**
   * **Intel RealSense D455** \
     : Depth sensing 및 RGB 이미지 동시 수집을 위한 RGB-D 카메라. \
-    : 카메라는 로봇의 End-Effector에 Eye-in-Hand 방식으로 고정됨.
+    : 카메라는 로봇의 외부에 Eye-to-Hand 방식으로 고정됨.
   * **Elephant Robotics MyCobot 280 M5** \
-    : ROS2 호환 소형 로봇팔로, Eye-in-Hand 구조에서 카메라와 함께 이동하며 물체 탐지 및 정밀 제어 가능. 
-  * **125mm 철제 원기둥 추가** \
-    : RGB-D 카메라의 깊이 추정 정확도 향상을 위해 End-Effector 아래에 원기둥을 장착. \
-    : 평면 기반의 Depth 오류 및 클리핑 문제를 완화하고, 픽 포인트 추정의 안정성 증가.
+    : ROS2 호환 소형 로봇팔
 
 * **통합 시스템 구성**
   * 카메라 → Depth + RGB 이미지 취득
   * ROI 추출 및 포인트클라우드 생성
   * Surface normal + PCA 기반 RPY 자세 추정
-  * 추정된 RPY → 로봇 베이스 좌표계로 변환하여 pick pose 결정
+  * 추정된 6-DoF → 로봇 베이스 좌표계로 변환하여 pick pose 결정
 
 * **기술 스택**
   * OS: Ubuntu 22.04
   * ROS: ROS2 Humble
   * Vision: OpenCV, Open3D
-  * Detection: YOLOv10 기반 커스텀 객체 탐지
+  * Detection: YOLOv11 기반 커스텀 객체 탐지
 
 
 <br>
 
 ## 2. Hand-Eye Calibration 오차 분석
-Eye-in-Hand 환경에서 캘리브레이션된 카메라의 외재 파라미터 정밀도를 높이기 위해, \
-**기존 Tsai-Lenz 알고리즘 기반 변환 행렬**에 **ICP 기반 후정합**을 적용. \
+캘리브레이션 정밀도를 높이기 위해 **Tsai-Lenz 알고리즘 기반 변환 행렬**에 다양한 후처리 방식을 적용하고,  
+XYZ 오차와 RPY 오차로 나누어 분석을 수행하였다.  
+<br>
+### 2.1 XYZ 오차 분석
+Eye-to-Hand 환경에서 ICP 기반 후정합을 적용하여 외재 파라미터의 정밀도를 개선하였다. 
+
 그림: 오차 분포 시각화 (진한 색: 오차 큼 / 밝은 색: 오차 작음)
 
 |  정확도 식별 실험 환경 | 초기 R,t 결과 | ICP 정합 적용 후 |
 |-------------|----------------|--------------------|
 | <img src="./data/asset/Environment1.png" width="300"/> | <img src="./data/asset/Eye-in-Hand2.png" width="300"/> | <img src="./data/asset/Eye-in-Hand_ICP_optimized.png" width="300"/> |
 
-총 12개 지점에 대해 실험을 수행한 결과, 다음과 같은 **오차 개선**을 확인:
+총 12개 지점에 대해 실험을 수행한 결과, 다음과 같은 **XYZ 오차 개선**을 확인:
 | 구분   | X축 평균 오차 (mm) | Y축 평균 오차 (mm) | 전체 평균 오차 (mm) |
 | ---- | ------------- | ------------- | ------------- |
 | 정합 전 | 16.97         | 75.95         | **92.92**     |
@@ -115,7 +112,33 @@ Eye-in-Hand 환경에서 캘리브레이션된 카메라의 외재 파라미터 
 > **정합 전 전체 오차**: 92.92 mm \
 > **정합 후 전체 오차**: 31.28 mm \
 > **오차 개선률**: **66.34%** \
-> **Y축 오차 개선률이 두드러짐 (76.46%)** 
+> **Y축 오차 개선률이 두드러짐 (76.46%)**
+
+<br>
+
+### 2.2 RPY 오차 분석
+추가적으로, RPY 각도의 정밀도를 평가하기 위해 **Table Normal Fix** 방식을 적용하였다.  
+이 방식은 Depthmap 평면 분할로 얻은 테이블 법선 벡터를 이용해 회전 행렬을 보정하는 방법이다.  
+
+그림: RPY 오차 개선 (좌: 보정 전, 우: 보정 후)
+
+| 구분 | 보정 전 | 보정 후 |
+|-----|---------|---------|
+| 이미지 | <img src="./data/asset/table_normal_fix_before.png" width="300"/> | <img src="./data/asset/table_normal_fix_after.png" width="300"/> |
+| camera RPY |  (1.460, 2.320, 93.034) [deg] | (1.460, 2.320, 93.034) [deg]  |
+| Base RPY | (-168.07, -1.675, -2.52) [deg] | (-178.820, -0.69, -3.03) [deg] |
+
+**축별 오차 및 개선률**
+
+| 항목  | 보정 전 오차 (deg) | 보정 후 오차 (deg) | 개선률 |
+|------|---------------------|---------------------|--------|
+| Roll | 11.93               | 1.18                | **90.11%↓** |
+| Pitch| 1.675               | 0.69                | **58.81%↓** |
+
+**분석**  
+- Table Normal Fix 적용 후, **Roll 값이 -180°에 가까워지고, Pitch 값이 0°에 더 근접**하였다.  
+- 이는 Cube 대상 정렬 기준에서 **Roll이 ±180°에 가까울수록 오차가 작고, Pitch가 0°에 가까울수록 정확도가 높음**을 의미한다.  
+- 결과적으로 RPY 보정에서 **Roll과 Pitch 오차가 개선**되어, 로봇 Pick & Place 수행 시 안정성이 향상됨을 확인하였다.  
 
 <br>
 
