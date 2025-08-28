@@ -1,23 +1,20 @@
 # my ignore data
-# 전체 captures 하위 무시
-data/captures/color/*.jpg
-data/captures/depth/*.npy
-data/captures/intrinsics/*.json
-data/Calibration/Eye-in-Hand2/merged_target_pcd.ply
 
-!data/captures/color/2025-07-30_10-21-03.jpg
-!data/captures/depth/2025-07-30_10-21-03.npy
-!data/captures/intrinsics/2025-07-30_10-21-03.json
+data/captures/
+data/captures/
+data/captures/
+data/Calibration/
 
 config/
 launch/
 tests/
 yolo/
 
-
 **/temp.py
 **/*.pt
 
+.json
+.ply
 .env
 
 # Byte-compiled / optimized / DLL files
