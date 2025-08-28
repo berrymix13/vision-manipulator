@@ -52,7 +52,6 @@ def detect_objects(c_path, d_path, target_list,
         undistorted = cv2.undistortPoints(pixel, camera_matrix, dist_coeffs)
         cx_u, cy_u = undistorted[0][0]
         
-        
         # 픽셀 → 카메라 XYZ 
         x_cam = round(cx_u * z, 4)
         y_cam = round(cy_u * z, 4)
