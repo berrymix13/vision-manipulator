@@ -203,10 +203,10 @@ Eye-to-Hand 환경에서 **Tsai–Lenz 알고리즘 기반 초기 변환 행렬*
   <tbody>
     <tr>
       <td>
-        <img src="./data/asset/comparison_rotation.png" width="300" align="center" />
+        <img src="./data/asset/line_rotation_smooth_fill.png" width="300" align="center" />
       </td>
       <td>
-        <img src="./data/asset/comparison_translation.png" width="300" align="center" />
+        <img src="./data/asset/line_translation_smooth_fill.png" width="300" align="center" />
       </td>
     </tr>
   </tbody>
