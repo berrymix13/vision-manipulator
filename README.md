@@ -34,14 +34,36 @@ vision-manipulator/
 <br>
 
 ## 주요 기능
-
-| 기능                          | 설명                                        |
-| --------------------------- | ----------------------------------------- |
-| **Vision 기반 객체 인식**         | YOLOv11 fine-tuning 모델로 실시간 탐지            |
-| **좌표 변환**                   | 2D keypoint → 3D 카메라 좌표 → 로봇 베이스 좌표       |
-| **Eye-in-Hand Calibration** | 카메라→그리퍼 변환 행렬 계산 (`cv2.calibrateHandEye`) |
-| **자연어 명령 처리**               | GPT 기반 LLM으로 자연어를 명령어로 해석                 |
-| **Grasp 제어**                | 예측된 위치 기반 로봇팔 Pick & Place 동작 수행          |
+<table align="center" style="text-align: center;">
+  <thead>
+    <tr>
+      <th><b>기능</b></th>
+      <th><b>설명</b></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th><b>Vision 기반 객체 인식</b></th>
+      <th>YOLOv11 fine-tuning 모델로 실시간 탐지</th>
+    </tr>
+    <tr>
+      <th><b>좌표 변환</b></th>
+      <th>2D keypoint → 3D 카메라 좌표 → 로봇 베이스 좌표</th>
+    </tr>
+    <tr>
+      <th><b>Eye-in-Hand Calibration</b></th>
+      <th>카메라→그리퍼 변환 행렬 계산 (`cv2.calibrateHandEye`)</th>
+    </tr>
+    <tr>
+      <th><b>자연어 명령 처리</b></th>
+      <th>GPT 기반 LLM으로 자연어를 명령어로 해석</th>
+    </tr>
+    <tr>
+      <th><b>Grasp 제어</b></th>
+      <th>예측된 위치 기반 로봇팔 Pick & Place 동작 수행</th>
+    </tr>
+  </tbody>
+</table>
 
 <br>
 
@@ -56,10 +78,10 @@ vision-manipulator/
   <tbody>
     <tr>
       <td>
-        <img src="./data/asset/Environment4.jpg" height="300" align="center" />
+        <img src="./data/asset/Environment4.jpg" height="200" align="center" />
       </td>
       <td>
-        <img src="./data/asset/charuco_board.jpg" height="300" align="center" />
+        <img src="./data/asset/charuco_board.jpg" height="200" align="center" />
       </td>
     </tr>
   </tbody>
@@ -88,57 +110,145 @@ vision-manipulator/
 <br>
 
 ## 2. Hand-Eye Calibration 오차 분석
-캘리브레이션 정밀도를 높이기 위해 **Tsai-Lenz 알고리즘 기반 변환 행렬**에 다양한 후처리 방식을 적용하고,  
-XYZ 오차와 RPY 오차로 나누어 분석을 수행하였다.  
+Eye-to-Hand 환경에서 **Tsai–Lenz 알고리즘 기반 초기 변환 행렬**을 구한 뒤,  
+후처리 단계를 통해 **회전(R)과 병진(t) 오차를 단계적으로 줄이는 방식**을 적용하였다.  
+
+최종적으로는 **Pose Graph Optimization(PGO) + Inlier Filtering**으로 보정된  
+`cam2base` 변환 행렬을 사용한다.
 <br>
-### 2.1 XYZ 오차 분석
-Eye-to-Hand 환경에서 ICP 기반 후정합을 적용하여 외재 파라미터의 정밀도를 개선하였다. 
+### 2.1 단계별 보정 절차
 
-그림: 오차 분포 시각화 (진한 색: 오차 큼 / 밝은 색: 오차 작음)
+1. **초기 추정 (Tsai–Lenz)**  
+   - Charuco 보드 인식 기반으로 초기 \(R_{cam→base}, t_{cam→base}\) 계산  
+   - 기본 정합은 가능하지만, 회전·병진 오차가 크게 남음
 
-|  정확도 식별 실험 환경 | 초기 R,t 결과 | ICP 정합 적용 후 |
-|-------------|----------------|--------------------|
-| <img src="./data/asset/Environment1.png" width="300"/> | <img src="./data/asset/Eye-in-Hand2.png" width="300"/> | <img src="./data/asset/Eye-in-Hand_ICP_optimized.png" width="300"/> |
+2. **회전 보정 (Table Normal Fix)**
+   - Depthmap 평면 분할을 통해 테이블 법선 벡터 추정  
+   - 초기 회전 행렬의 Roll/Pitch 기울기를 보정하여  
+     로봇–테이블 정렬 기준의 안정성을 확보
+     
+<table align="center" style="text-align: center;">
+  <thead>
+    <tr>
+      <th><b>구분</b></th>
+      <th><b>보정 전(Camera View)</b></th>
+      <th><b>보정 후</b></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>이미지</th>
+      <td>
+        <img src="./data/asset/table_normal_fix_before.png" width="200" align="center" />
+      </td>
+      <td>
+        <img src="./data/asset/table_normal_fix_after.png" width="200" align="center" />
+      </td>
+    </tr>
+    <tr>
+      <th><b>camera PRY</b></th>
+      <th><b> (1.460, 2.320, 93.034) [deg] </b></th>
+      <th><b>(1.460, 2.320, 93.034) [deg] </b></th>
+    </tr>
+    <tr>
+      <th><b>Base PRY</b></th>
+      <th><b> (-168.07, -1.675, -2.52) [deg] </b></th>
+      <th><b> (-178.820, -0.69, -3.03) [deg] </b></th>
+    </tr>
+  </tbody>
+</table>
+  
+  <table align="center" style="text-align: center;">
+    <thead>
+      <tr>
+        <th><b구분</b></th>
+        <th><b>보정 전 오차 [deg]</b></th>
+        <th><b>보정 후 오차 [deg]</b></th>
+        <th><b>개선률</b></th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <th><b>Roll</b></th>
+        <th><b>11.93</b></th>
+        <th><b>1.18</b></th>
+        <th><b>90.11%</b></th>
+      </tr>
+      <tr>
+        <th><b>Pitch</b></th>
+        <th><b>1.675</b></th>
+        <th><b>0.69</b></th>
+        <th><b>58.81%</b></th>
+      </tr>
+    </tbody>
+  </table>
 
-총 12개 지점에 대해 실험을 수행한 결과, 다음과 같은 **XYZ 오차 개선**을 확인:
-| 구분   | X축 평균 오차 (mm) | Y축 평균 오차 (mm) | 전체 평균 오차 (mm) |
-| ---- | ------------- | ------------- | ------------- |
-| 정합 전 | 16.97         | 75.95         | **92.92**     |
-| 정합 후 | 16.03         | 15.26         | **31.28**     |
 
-* 전체 평균 오차 **66.34% 감소**
-* 특히 Y축 오차는 **약 76.5%** 개선됨
-
-> **정합 전 전체 오차**: 92.92 mm \
-> **정합 후 전체 오차**: 31.28 mm \
-> **오차 개선률**: **66.34%** \
-> **Y축 오차 개선률이 두드러짐 (76.46%)**
+3. **최종 최적화 (PGO with inlier filtering)**  
+   - AX=XB 형태의 Pose Graph Optimization 적용  
+   - MAD 기반 inlier filtering으로 외란 프레임 제거  
+   - 결과적으로 **평균 회전 오차 ~0.9°, 평균 병진 오차 ~3 mm** 수준 달성
 
 <br>
 
-### 2.2 RPY 오차 분석
-추가적으로, RPY 각도의 정밀도를 평가하기 위해 **Table Normal Fix** 방식을 적용하였다.  
-이 방식은 Depthmap 평면 분할로 얻은 테이블 법선 벡터를 이용해 회전 행렬을 보정하는 방법이다.  
+### 2.2 최종 성능
 
-그림: RPY 오차 개선 (좌: 보정 전, 우: 보정 후)
+<table align="center" style="text-align: center;">
+  <thead>
+    <tr>
+      <th><b>Rotation Comparison Plot(Camera View)</b></th>
+      <th><b>translation Comparison Plot</b></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>
+        <img src="./data/asset/comparison_rotation.png" width="300" align="center" />
+      </td>
+      <td>
+        <img src="./data/asset/comparison_translation.png" width="300" align="center" />
+      </td>
+    </tr>
+  </tbody>
+</table>
 
-| 구분 | 보정 전 | 보정 후 |
-|-----|---------|---------|
-| 이미지 | <img src="./data/asset/table_normal_fix_before.png" width="300"/> | <img src="./data/asset/table_normal_fix_after.png" width="300"/> |
-| camera RPY |  (1.460, 2.320, 93.034) [deg] | (1.460, 2.320, 93.034) [deg]  |
-| Base RPY | (-168.07, -1.675, -2.52) [deg] | (-178.820, -0.69, -3.03) [deg] |
+<table align="center" style="text-align: center;">
+  <thead>
+    <tr>
+      <th><b>항목</b></th>
+      <th><b>보정 전 (초기)</b></th>
+      <th><b>Table Normal Fix 후</b></th>
+      <th><b>PGO 최적화 후</b></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th><b>회전 오차 (mean)</b></th>
+      <th><b>8°이상</b></th>
+      <th><b>1–2° 수준 </b></th>
+      <th><b> ~0.9°</b></th>
+    </tr>
+    <tr>
+      <th><b>병진 오차 (mean)</b></th>
+      <th><b>6~8cm</b></th>
+      <th><b>6~8cm</b></th>
+      <th><b>~3 mm</b></th>
+    </tr>
+  </tbody>
+</table>
 
-**축별 오차 및 개선률**
+- Table Normal Fix로 **Roll/Pitch 오차는 크게 줄었지만**,  
+  **병진 오차는 여전히 수 cm 수준** 남음  
+- PGO_inlier 최적화 적용 후, **XYZ 오차가 수 mm 수준으로 안정화**  
+- Pick & Place 작업에서 요구되는 정밀도에 부합
 
-| 항목  | 보정 전 오차 (deg) | 보정 후 오차 (deg) | 개선률 |
-|------|---------------------|---------------------|--------|
-| Roll | 11.93               | 1.18                | **90.11%↓** |
-| Pitch| 1.675               | 0.69                | **58.81%↓** |
 
-**분석**  
-- Table Normal Fix 적용 후, **Roll 값이 -180°에 가까워지고, Pitch 값이 0°에 더 근접**하였다.  
-- 이는 Cube 대상 정렬 기준에서 **Roll이 ±180°에 가까울수록 오차가 작고, Pitch가 0°에 가까울수록 정확도가 높음**을 의미한다.  
-- 결과적으로 RPY 보정에서 **Roll과 Pitch 오차가 개선**되어, 로봇 Pick & Place 수행 시 안정성이 향상됨을 확인하였다.  
+### 2.3 분석
+
+- **단일 테이블 평면**만으로는 XY 제약력이 부족 → Z 및 Roll/Pitch만 안정화  
+- PGO를 통한 전체 Pose Consistency 최적화가 필수  
+- Outlier 제거를 병행해야 안정적인 결과 확보 가능  
+- 최종 결과는 **실측 값 대비 ±3 mm / ±1° 이내 오차**로 수렴  
 
 <br>
 
