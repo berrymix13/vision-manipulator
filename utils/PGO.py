@@ -92,16 +92,41 @@ def optimize_cam2base_PGO(A_list, B_list, R_cam2base_init=np.eye(3),
         Y = se3_from_Rt(Rotation.from_rotvec(rY).as_matrix(), tY)
         return X, Y
 
+    # def residual(x):
+        # """잔차 함수: Y^(-1) * A * X * B = I가 되도록 최적화"""
+        # X, Y = unpack(x)
+        # Yin = se3_inv(Y)
+        # res = []
+        # for A, B in zip(A_list, B_list):
+        #     T = se3_mul(se3_mul(Yin, A), se3_mul(X, B))
+        #     e = log_se3(T)
+        #     res.append(e)
+        # return np.concatenate(res)
+        
     def residual(x):
-        """잔차 함수: Y^(-1) * A * X * B = I가 되도록 최적화"""
+        """잔차 함수: X^{-1} A Y B = I가 되도록 최적화"""
+        # 최적화 대상 변수 벡터 x를 변환행렬 X, Y로 복원
         X, Y = unpack(x)
-        Yin = se3_inv(Y)
+
+        # X의 역행렬 (X^{-1}) 계산
+        Xinv = se3_inv(X)
+
         res = []
+        # 각 관측쌍 (A, B)에 대해 잔차를 계산
+        # A = base → ee, B = target → cam
         for A, B in zip(A_list, B_list):
-            T = se3_mul(se3_mul(Yin, A), se3_mul(X, B))
+            # 잔차 대상 변환식:
+            #   X^{-1} * A * Y * B
+            #   이 값이 항등행렬(I)에 가까워지도록 최적화
+            T = se3_mul(se3_mul(se3_mul(Xinv, A), Y), B)
+
+            # SE(3) 변환행렬을 로그맵으로 표현해 6D 오차 벡터(e) 추출
             e = log_se3(T)
             res.append(e)
+
+        # 모든 잔차 벡터를 하나로 이어붙여 반환
         return np.concatenate(res)
+
     
     # 최적화 실행 (outlier가 있으면 'trf'+'soft_l1' 추천)
     result = least_squares(residual, x0, method='trf', loss='soft_l1', 
@@ -116,9 +141,11 @@ def optimize_cam2base_PGO(A_list, B_list, R_cam2base_init=np.eye(3),
 def per_frame_residuals_SE3(X, Y, A_list, B_list):
     """프레임별 잔차 계산 (회전각도, 평행이동 거리)"""
     deg_list, mm_list = [], []
-    Tinvs = np.linalg.inv(Y)
+    # Tinvs = np.linalg.inv(Y)
+    Xinv = np.linalg.inv(X)
     for A, B in zip(A_list, B_list):
-        T = Tinvs @ A @ X @ B
+        # T = Tinvs @ A @ X @ B
+        T = Xinv @ A @ Y @ B    # <= 최적화에 사용한 것과 동일하게
         r = Rotation.from_matrix(T[:3,:3]).as_rotvec()
         t = T[:3,3]
         deg_list.append(np.linalg.norm(r) * 180 / np.pi)
@@ -151,8 +178,8 @@ def mad_filter(vals, k=3.5):
 def main():
     """메인 실행 함수"""
     # 경로 설정
-    MAIN_PATH = "/home/ros/llm_robot/data/Calibration/Eye-to-Hand11"
-    init_cam2base_path = f"{MAIN_PATH}/cam2base_table_normal_fix.json"
+    MAIN_PATH = "/home/ros/llm_robot/data/Calibration/Eye-to-Hand13"
+    init_cam2base_path = f"{MAIN_PATH}/cam2base_table_normal_fix_v1.json"
     
     # 초기 cam2base 변환행렬 로드
     with open(init_cam2base_path, "r") as f:
@@ -195,22 +222,20 @@ def main():
     # 변환행렬 리스트 생성
     A_list = [se3_from_Rt(Ra, ta) for Ra, ta in zip(R_base2ee_list, t_base2ee_list)]
     B_list = [se3_from_Rt(Ra, ta) for Ra, ta in zip(R_target2cam_list, t_target2cam_list)]
-    A_list_inv = [np.linalg.inv(T) for T in A_list]
-    B_list_inv = [np.linalg.inv(T) for T in B_list]
-    
+
     # 1단계: 초기 PGO 최적화
     print("=== 1단계: 초기 PGO 최적화 ===")
-    X4, Y4, info4 = optimize_cam2base_PGO(
-        A_list_inv, B_list_inv,
+    X_opt, Y_opt, info_opt = optimize_cam2base_PGO(
+        A_list, B_list,
         R_cam2base_init=R_cam2base_init,
         t_cam2base_init=np.zeros(3),
         max_nfev=400
     )
-    print(f"초기 최적화 완료 - t: {X4[:3,3]}, cost: {info4.cost:.6f}, nfev: {info4.nfev}")
+    print(f"초기 최적화 완료 - t: {X_opt[:3,3]}, cost: {info_opt.cost:.6f}, nfev: {info_opt.nfev}")
     
     # 2단계: MAD 필터링으로 outlier 제거
     print("\n=== 2단계: MAD 필터링 ===")
-    deg, mm = per_frame_residuals_SE3(X4, Y4, A_list_inv, B_list_inv)
+    deg, mm = per_frame_residuals_SE3(X_opt, Y_opt, A_list, B_list)
     idx = np.arange(len(deg))
     
     # 회전/평행이동 각각 MAD 필터 적용
@@ -224,8 +249,8 @@ def main():
     
     # 3단계: inlier만으로 재최적화
     print("\n=== 3단계: Inlier 재최적화 ===")
-    A_in = [A_list_inv[i] for i in idx[keep]]
-    B_in = [B_list_inv[i] for i in idx[keep]]
+    A_in = [A_list[i] for i in idx[keep]]
+    B_in = [B_list[i] for i in idx[keep]]
     
     X_in, Y_in, info_in = optimize_cam2base_PGO(
         A_in, B_in,
