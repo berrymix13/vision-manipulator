@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from turtle import done
 import cv2
 import json
 import time
@@ -91,53 +92,6 @@ class EyeToHandCalibrator:
         print(f"  - 카메라 -X축 → 로봇 Y축")
         print(f"  - 카메라 -Y축 → 로봇 Z축")
     
-    def _load_camera_intrinsics(self, intrinsics_path: str) -> Tuple[np.ndarray, np.ndarray]:
-        """
-        카메라 내부 파라미터를 로드합니다.
-        
-        Args:
-            intrinsics_path: 카메라 내부 파라미터 JSON 파일 경로
-            
-        Returns:
-            Tuple[np.ndarray, np.ndarray]: (camera_matrix, dist_coeffs)
-        """
-        try:
-            # 새로운 형식의 intrinsics 파일 로드
-            with open(intrinsics_path, 'r') as f:
-                intrinsics_data = json.load(f)
-            
-            # camera_matrix와 dist_coeffs가 직접 저장된 경우
-            if "camera_matrix" in intrinsics_data and "dist_coeffs" in intrinsics_data:
-                camera_matrix = np.array(intrinsics_data["camera_matrix"], dtype=np.float64)
-                dist_coeffs = np.array(intrinsics_data["dist_coeffs"], dtype=np.float64)
-                print(f"카메라 내부 파라미터 로드 완료: {intrinsics_path}")
-                return camera_matrix, dist_coeffs
-            
-            # 기존 형식의 intrinsics 파일 로드 (load_intrinsics 함수 사용)
-            camera_matrix, dist_coeffs = load_intrinsics(intrinsics_path)
-            print(f"카메라 내부 파라미터 로드 완료: {intrinsics_path}")
-            return camera_matrix, dist_coeffs
-            
-        except Exception as e:
-            print(f"카메라 내부 파라미터 로드 실패: {e}")
-            # 기본 카메라 행렬 사용 (RealSense D455 848x480 해상도용)
-            camera_matrix = np.array([
-                [430.341,   0.0,     422.633],
-                [0.0,       430.341, 244.632],
-                [0.0,       0.0,     1.0]
-            ], dtype=np.float64)
-            
-            # 왜곡 계수 (k1, k2, p1, p2, k3)
-            dist_coeffs = np.array([
-                -0.05594644322991371,
-                0.06878077983856201,
-                -0.00011232726683374494,
-                0.000743341923225671,
-                -0.022005939856171608
-            ], dtype=np.float64)
-            return camera_matrix, dist_coeffs
-    
-
 
     def detect_charuco_pose(self, image: np.ndarray, camera_matrix: np.ndarray, dist_coeffs: np.ndarray) -> Optional[Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]]:
         """
@@ -443,93 +397,6 @@ class EyeToHandCalibrator:
         # ZYX 순서로 회전 행렬 곱셈
         return Rz @ Ry @ Rx
     
-    
-    def collect_angles_realtime_simple(self, num_poses: int = 20) -> bool:
-        """
-        간단한 실시간 각도 수집 모드 (더 안정적인 버전)
-        
-        Args:
-            num_poses: 수집할 포즈 개수
-            
-        Returns:
-            bool: 수집 성공 여부
-        """
-        print(f"\n=== 실시간 각도 수집 모드 (간단 버전) ===")
-        print(f"수집할 포즈 수: {num_poses}")
-        print("로봇을 수동으로 조작하여 다양한 포즈의 각도를 수집합니다.")
-        print("각 포즈에서 Enter를 눌러 저장하거나 'q'를 눌러 종료하세요.")
-        
-        collected_poses = 0
-        pose_index = 0
-        
-        while collected_poses < num_poses:
-            try:
-                # 현재 각도 가져오기
-                angles = self.get_robot_angles()
-                coords = self.robot.get_coords()
-                
-                # 현재 상태 출력
-                print(f"\n{'='*60}")
-                print(f"현재 상태: {collected_poses}/{num_poses} 포즈 수집됨")
-                print(f"목표: {num_poses}개 포즈")
-                print(f"현재 포즈 인덱스: {pose_index}")
-                print(f"\n로봇 상태:")
-                print(f"   각도: [{angles[0]:6.1f}, {angles[1]:6.1f}, {angles[2]:6.1f}, "
-                      f"{angles[3]:6.1f}, {angles[4]:6.1f}, {angles[5]:6.1f}]")
-                print(f"   좌표: [{coords[0]:6.1f}, {coords[1]:6.1f}, {coords[2]:6.1f}]")
-                print(f"\n⌨조작법:")
-                print(f"   Enter: 현재 포즈 저장")
-                print(f"   q: 종료")
-                print(f"   Ctrl+C: 강제 종료")
-                print(f"{'='*60}")
-                
-                # 사용자 입력 대기
-                user_input = input("\n명령을 입력하세요: ").strip().lower()
-                
-                if user_input == 'q':
-                    print(f"\n🛑 사용자에 의해 중단되었습니다. 수집된 포즈: {collected_poses}")
-                    break
-                elif user_input == '' or user_input == 's':
-                    # 현재 포즈 저장
-                    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-                    
-                    angle_data = {
-                        "angles": angles,
-                        "coords": coords,
-                        "pose_index": pose_index,
-                        "timestamp": timestamp
-                    }
-                    
-                    angle_path = self.angles_dir / f"{pose_index:02d}_{timestamp}_angles.json"
-                    with open(angle_path, 'w') as f:
-                        json.dump(angle_data, f, indent=2)
-                    
-                    print(f"\n✅ 포즈 {pose_index} 저장 완료!")
-                    print(f"   📁 저장 위치: {angle_path}")
-                    collected_poses += 1
-                    pose_index += 1
-                    
-                    if collected_poses < num_poses:
-                        print(f"\n🎉 {collected_poses}/{num_poses} 포즈 수집 완료!")
-                        input("다음 포즈로 계속하려면 Enter를 누르세요...")
-                    else:
-                        print(f"\n🎉 모든 포즈 수집 완료!")
-                
-            except KeyboardInterrupt:
-                print(f"\n🛑 사용자에 의해 중단되었습니다. 수집된 포즈: {collected_poses}")
-                break
-            except Exception as e:
-                print(f"\n❌ 오류 발생: {e}")
-                input("계속하려면 Enter를 누르세요...")
-                continue
-        
-        print(f"\n{'='*60}")
-        print(f"실시간 각도 수집 완료")
-        print(f"총 {collected_poses}개의 포즈 데이터가 수집되었습니다.")
-        print(f"{'='*60}")
-        
-        return collected_poses >= 10  # 최소 10개 이상 필요
-    
     def collect_angles_with_camera_feed(self, num_poses: int = 20) -> bool:
         """
         카메라 화면을 보여주면서 실시간 각도 수집 모드 (카메라 캡처 포함)
@@ -559,8 +426,6 @@ class EyeToHandCalibrator:
             print("✅ RealSense 카메라 연결 성공 (848x480)")
         except Exception as e:
             print(f"❌ 카메라 연결 실패: {e}")
-            print("카메라 없이 각도 수집을 계속합니다...")
-            return self.collect_angles_realtime_simple(num_poses)
         
         # RealSense에서 실제 카메라 내부 파라미터 가져오기
         color_profile = profile.get_stream(rs.stream.color)
@@ -632,48 +497,26 @@ class EyeToHandCalibrator:
                     # 전처리된 이미지를 컬러로 변환 (여기서 미리 생성)
                     gray_enhanced_colored = cv2.cvtColor(gray_enhanced, cv2.COLOR_GRAY2BGR)
                     
-                    try:
-                        aruco_params = cv2.aruco.DetectorParameters()
-                        # 검출 파라미터 최적화
-                        aruco_params.adaptiveThreshWinSizeMin = 3
-                        aruco_params.adaptiveThreshWinSizeMax = 23
-                        aruco_params.adaptiveThreshWinSizeStep = 10
-                        aruco_params.adaptiveThreshConstant = 7
-                        aruco_params.minMarkerPerimeterRate = 0.03
-                        aruco_params.maxMarkerPerimeterRate = 4.0
-                        aruco_params.polygonalApproxAccuracyRate = 0.03
-                        aruco_params.minCornerDistanceRate = 0.05
-                        aruco_params.minMarkerDistanceRate = 0.05
-                        aruco_params.minDistanceToBorder = 3
-                        aruco_params.minOtsuStdDev = 5.0
-                        aruco_params.perspectiveRemovePixelPerCell = 4
-                        aruco_params.perspectiveRemoveIgnoredMarginPerCell = 0.13
-                        aruco_params.maxErroneousBitsInBorderRate = 0.35
-                        aruco_params.errorCorrectionRate = 0.6
-                        
-                        aruco_detector = cv2.aruco.ArucoDetector(self.aruco_dict, aruco_params)
-                        corners, ids, rejected = aruco_detector.detectMarkers(gray_enhanced)
-                    except AttributeError:
-                        # OpenCV 4.4 이하 버전
-                        aruco_params = cv2.aruco.DetectorParameters_create()
-                        # 검출 파라미터 최적화
-                        aruco_params.adaptiveThreshWinSizeMin = 3
-                        aruco_params.adaptiveThreshWinSizeMax = 23
-                        aruco_params.adaptiveThreshWinSizeStep = 10
-                        aruco_params.adaptiveThreshConstant = 7
-                        aruco_params.minMarkerPerimeterRate = 0.03
-                        aruco_params.maxMarkerPerimeterRate = 4.0
-                        aruco_params.polygonalApproxAccuracyRate = 0.03
-                        aruco_params.minCornerDistanceRate = 0.05
-                        aruco_params.minMarkerDistanceRate = 0.05
-                        aruco_params.minDistanceToBorder = 3
-                        aruco_params.minOtsuStdDev = 5.0
-                        aruco_params.perspectiveRemovePixelPerCell = 4
-                        aruco_params.perspectiveRemoveIgnoredMarginPerCell = 0.13
-                        aruco_params.maxErroneousBitsInBorderRate = 0.35
-                        aruco_params.errorCorrectionRate = 0.6
-                        
-                        corners, ids, rejected = cv2.aruco.detectMarkers(gray_enhanced, self.aruco_dict, parameters=aruco_params)
+                    aruco_params = cv2.aruco.DetectorParameters()
+                    # 검출 파라미터 최적화
+                    aruco_params.adaptiveThreshWinSizeMin = 3
+                    aruco_params.adaptiveThreshWinSizeMax = 23
+                    aruco_params.adaptiveThreshWinSizeStep = 10
+                    aruco_params.adaptiveThreshConstant = 7
+                    aruco_params.minMarkerPerimeterRate = 0.03
+                    aruco_params.maxMarkerPerimeterRate = 4.0
+                    aruco_params.polygonalApproxAccuracyRate = 0.03
+                    aruco_params.minCornerDistanceRate = 0.05
+                    aruco_params.minMarkerDistanceRate = 0.05
+                    aruco_params.minDistanceToBorder = 3
+                    aruco_params.minOtsuStdDev = 5.0
+                    aruco_params.perspectiveRemovePixelPerCell = 4
+                    aruco_params.perspectiveRemoveIgnoredMarginPerCell = 0.13
+                    aruco_params.maxErroneousBitsInBorderRate = 0.35
+                    aruco_params.errorCorrectionRate = 0.6
+                    
+                    aruco_detector = cv2.aruco.ArucoDetector(self.aruco_dict, aruco_params)
+                    corners, ids, rejected = aruco_detector.detectMarkers(gray_enhanced)
                     
                     # 검출된 마커 그리기 (전처리된 이미지에)
                     if ids is not None and len(ids) > 0:
@@ -991,310 +834,7 @@ class EyeToHandCalibrator:
         print(f"{'='*60}")
         
         return collected_poses >= 10  # 최소 10개 이상 필요
-    
-    def capture_data_at_angles(self, angle_data: Dict[str, Any], pose_index: int) -> bool:
-        """
-        저장된 각도 데이터를 사용하여 로봇을 이동시키고 이미지를 캡처합니다.
-        
-        Args:
-            angle_data: 각도 데이터 딕셔너리
-            pose_index: 포즈 인덱스
-            
-        Returns:
-            bool: 캡처 성공 여부
-        """
-        try:
-            print(f"\n[{pose_index}] 자동 이동 모드")
-            
-            # 저장된 각도로 로봇 이동
-            angles = angle_data["angles"]
-            print(f"로봇을 각도 {angles}로 이동 중...")
-            
-            # 로봇 이동 (속도 50)
-            self.robot.send_angles(angles, 50)
-            time.sleep(3)  # 이동 완료 대기
-            
-            # 현재 로봇 포즈 가져오기
-            R_base2ee, t_base2ee = self.get_robot_pose()
-            
-            # 이미지 캡처
-            print("이미지 캡처 중...")
-            color_path, depth_path, intrinsics_path = capture_d455_images(
-                save_dir=str(self.save_dir),
-                rgb_size=(848, 480),
-                depth_size=(848, 480)
-            )
-            
-            # 카메라 내부 파라미터 로드
-            camera_matrix, dist_coeffs = self._load_camera_intrinsics(intrinsics_path)
-            
-            # 이미지에서 ChArUco 검출
-            image = cv2.imread(color_path)
-            charuco_pose = self.detect_charuco_pose(image, camera_matrix, dist_coeffs)
-            
-            if charuco_pose is None:
-                print(f"[{pose_index}] ChArUco 검출 실패")
-                print("ChArUco 보드가 카메라에 잘 보이는지 확인하고 다시 시도해주세요.")
-                return False
-            
-            rvec, tvec, charuco_corners, charuco_ids = charuco_pose
-            
-            # 거리 정보 출력 (디버깅용)
-            distance = np.linalg.norm(tvec)
-            print(f"ChArUco 보드까지의 거리: {distance*1000:.1f}mm")
-            
-            # 데이터 저장
-            timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-            
-            # 로봇 포즈 저장
-            pose_data = {
-                "R_base2ee": R_base2ee.tolist(),
-                "t_base2ee": t_base2ee.tolist(),
-                "angles": angles,
-                "pose_index": pose_index,
-                "timestamp": timestamp
-            }
-            pose_path = self.poses_dir / f"{pose_index:02d}_{timestamp}_pose.json"
-            
-            with open(pose_path, 'w') as f:
-                json.dump(pose_data, f, indent=2)
-            
-            # ChArUco 포즈 저장 (타겟 -> 카메라) - Eye-to-Hand 구조
-            # detect_charuco_pose()는 카메라 -> 타겟을 반환하므로 역행렬을 취함
-            R_cam2target, _ = cv2.Rodrigues(rvec)
-            t_cam2target = tvec
-            
-            # 타겟 -> 카메라 변환 (역행렬)
-            R_target2cam = R_cam2target.T
-            t_target2cam = -R_target2cam @ t_cam2target
-            
-            charuco_data = {
-                "rvec_target2cam": cv2.Rodrigues(R_target2cam)[0].tolist(),
-                "tvec_target2cam": t_target2cam.tolist(),
-                "rvec_cam2target": rvec.tolist(),  # 원본 데이터도 보존
-                "tvec_cam2target": tvec.tolist(),
-                "pose_index": pose_index,
-                "timestamp": timestamp
-            }
-            charuco_path = self.save_dir / f"{pose_index:02d}_{timestamp}_charuco.json"
-            
-            with open(charuco_path, 'w') as f:
-                json.dump(charuco_data, f, indent=2)
-            
-            print(f"[{pose_index}] ✅ 저장 완료")
-            print(f"  - 이미지: {color_path}")
-            print(f"  - 깊이: {depth_path}")
-            print(f"  - 로봇 포즈: {pose_path}")
-            print(f"  - ChArUco 포즈: {charuco_path}")
-            
-            return True
-            
-        except Exception as e:
-            print(f"[{pose_index}] 오류 발생: {e}")
-            return False
-    
-    def perform_automatic_calibration(self) -> bool:
-        """
-        저장된 각도 데이터를 사용하여 자동으로 캘리브레이션을 수행합니다.
-        
-        Returns:
-            bool: 캘리브레이션 성공 여부
-        """
-        print(f"\n=== 자동 캘리브레이션 모드 ===")
-        
-        # 저장된 각도 파일들 로드
-        angle_files = list(self.angles_dir.glob("*_angles.json"))
-        
-        if len(angle_files) == 0:
-            print("저장된 각도 데이터가 없습니다. 먼저 실시간 각도 수집을 수행해주세요.")
-            return False
-        
-        # 파일 정렬 (인덱스 순서대로)
-        angle_files.sort(key=lambda x: int(x.stem.split('_')[0]))
-        
-        print(f"총 {len(angle_files)}개의 각도 데이터를 사용하여 자동 캘리브레이션을 시작합니다...")
-        
-        successful_captures = 0
-        
-        for i, angle_file in enumerate(angle_files):
-            print(f"\n[{i+1}/{len(angle_files)}] 각도 데이터 처리 중...")
-            
-            # 각도 데이터 로드
-            with open(angle_file, 'r') as f:
-                angle_data = json.load(f)
-            
-            pose_index = angle_data["pose_index"]
-            
-            if self.capture_data_at_angles(angle_data, pose_index):
-                successful_captures += 1
-                print(f"✅ 포즈 {pose_index} 캡처 성공 ({successful_captures}/{len(angle_files)})")
-            else:
-                print(f"❌ 포즈 {pose_index} 캡처 실패")
-                
-                # 재시도 옵션
-                retry = input("이 포즈를 다시 시도하시겠습니까? (y/n): ").lower().strip()
-                if retry == 'y':
-                    i -= 1  # 같은 파일을 다시 처리
-                    continue
-        
-        print(f"\n=== 자동 캡처 완료 ===")
-        print(f"성공: {successful_captures}/{len(angle_files)}")
-        
-        if successful_captures >= 10:  # 최소 10개 이상의 포즈가 필요
-            return self.calculate_transformation_matrix()
-        else:
-            print("충분한 데이터가 수집되지 않았습니다.")
-            return False
-    
-    def capture_data_at_manual_pose(self, pose_index: int) -> bool:
-        """
-        수동으로 조작된 로봇 포즈에서 이미지와 포즈 데이터를 캡처합니다.
-        
-        Args:
-            pose_index: 포즈 인덱스
-            
-        Returns:
-            bool: 캡처 성공 여부
-        """
-        try:
-            print(f"\n[{pose_index}] 수동 조작 모드")
-            
-            # 로봇을 수동 조작 모드로 전환
-            self.robot.release_all_servos()
-            
-            # 사용자 입력 대기
-            input("로봇을 원하는 위치로 이동한 후 Enter를 눌러주세요...")
-            
-            # 로봇을 고정 모드로 전환
-            self.robot.power_on()
-            time.sleep(2)  # 로봇 안정화 대기
-            
-            # 현재 로봇 포즈 가져오기
-            R_base2ee, t_base2ee = self.get_robot_pose()
-            
-            # 이미지 캡처
-            print("이미지 캡처 중...")
-            color_path, depth_path, intrinsics_path = capture_d455_images(
-                save_dir=str(self.save_dir),
-                rgb_size=(848, 480),
-                depth_size=(848, 480)
-            )
-            
-            # 카메라 내부 파라미터 로드
-            camera_matrix, dist_coeffs = self._load_camera_intrinsics(intrinsics_path)
-            
-            # 이미지에서 ChArUco 검출
-            image = cv2.imread(color_path)
-            charuco_pose = self.detect_charuco_pose(image, camera_matrix, dist_coeffs)
-            
-            if charuco_pose is None:
-                print(f"[{pose_index}] ChArUco 검출 실패")
-                print("ChArUco 보드가 카메라에 잘 보이는지 확인하고 다시 시도해주세요.")
-                return False
-            
-            rvec, tvec, charuco_corners, charuco_ids = charuco_pose
-            
-            # 거리 정보 출력 (디버깅용)
-            distance = np.linalg.norm(tvec)
-            print(f"ChArUco 보드까지의 거리: {distance*1000:.1f}mm")
-            
-            # 데이터 저장
-            timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-            
-            # 로봇 포즈 저장
-            pose_data = {
-                "R_base2ee": R_base2ee.tolist(),
-                "t_base2ee": t_base2ee.tolist(),
-                "pose_index": pose_index,
-                "timestamp": timestamp
-            }
-            pose_path = self.poses_dir / f"{pose_index:02d}_{timestamp}_pose.json"
-            
-            with open(pose_path, 'w') as f:
-                json.dump(pose_data, f, indent=2)
-            
-            # ChArUco 포즈 저장 (타겟 -> 카메라) - Eye-to-Hand 구조
-            # detect_charuco_pose()는 카메라 -> 타겟을 반환하므로 역행렬을 취함
-            R_cam2target, _ = cv2.Rodrigues(rvec)
-            t_cam2target = tvec
-            
-            # 타겟 -> 카메라 변환 (역행렬)
-            R_target2cam = R_cam2target.T
-            t_target2cam = -R_target2cam @ t_cam2target
-            
-            charuco_data = {
-                "rvec_target2cam": cv2.Rodrigues(R_target2cam)[0].tolist(),
-                "tvec_target2cam": t_target2cam.tolist(),
-                "rvec_cam2target": rvec.tolist(),  # 원본 데이터도 보존
-                "tvec_cam2target": tvec.tolist(),
-                "pose_index": pose_index,
-                "timestamp": timestamp
-            }
-            charuco_path = self.save_dir / f"{pose_index:02d}_{timestamp}_charuco.json"
-            
-            with open(charuco_path, 'w') as f:
-                json.dump(charuco_data, f, indent=2)
-            
-            print(f"[{pose_index}] ✅ 저장 완료")
-            print(f"  - 이미지: {color_path}")
-            print(f"  - 깊이: {depth_path}")
-            print(f"  - 로봇 포즈: {pose_path}")
-            print(f"  - ChArUco 포즈: {charuco_path}")
-            
-            return True
-            
-        except Exception as e:
-            print(f"[{pose_index}] 오류 발생: {e}")
-            return False
-    
-    def perform_manual_calibration(self, num_poses: int = 20) -> bool:
-        """
-        수동 조작을 통한 Eye-to-Hand calibration을 수행합니다.
-        
-        Args:
-            num_poses: 캡처할 포즈 개수
-            
-        Returns:
-            bool: 캘리브레이션 성공 여부
-        """
-        print(f"\n=== 수동 Eye-in-Hand Calibration 시작 ===")
-        print(f"캡처할 포즈 수: {num_poses}")
-        print("각 포즈에서 로봇을 수동으로 조작하여 ChArUco 보드를 다양한 각도에서 촬영합니다.")
-        
-        successful_captures = 0
-        current_pose_index = 0
-        
-        while successful_captures < num_poses:
-            print(f"\n[{successful_captures}/{num_poses}] 포즈 캡처 중...")
-            
-            if self.capture_data_at_manual_pose(current_pose_index):
-                successful_captures += 1
-                print(f"✅ 포즈 {successful_captures} 캡처 성공 ({successful_captures}/{num_poses})")
-                # 검출 성공 시 자동으로 다음 포즈로 진행
-                current_pose_index += 1
-            else:
-                print(f"❌ 포즈 {current_pose_index} 캡처 실패")
-                
-                # 재시도 옵션 (검출 실패 시에만 질문)
-                retry = input("이 포즈를 다시 시도하시겠습니까? (y/n/q): ").lower().strip()
-                if retry == 'q':
-                    print("캘리브레이션을 중단합니다.")
-                    break
-                elif retry == 'y':
-                    continue  # 같은 인덱스로 다시 시도
-                else:
-                    print("이 포즈를 건너뛰고 다음으로 진행합니다.")
-                    current_pose_index += 1
-        
-        print(f"\n=== 수동 캡처 완료 ===")
-        print(f"성공: {successful_captures}/{num_poses}")
-        
-        if successful_captures >= 10:  # 최소 10개 이상의 포즈가 필요
-            return self.calculate_transformation_matrix()
-        else:
-            print("충분한 데이터가 수집되지 않았습니다.")
-            return False
-    
+
     def calculate_transformation_matrix(self) -> bool:
         """
         수집된 데이터를 사용하여 Eye-to-Hand 변환 행렬을 계산합니다.
@@ -1488,8 +1028,6 @@ class EyeToHandCalibrator:
         except Exception as e:
             print(f"캘리브레이션 계산 중 오류: {e}")
             return False
-    
-
     
     def _solve_eye_to_hand_calibration(self, T_cam2target_list, T_base2ee_list, weights=None):
         """
@@ -1710,141 +1248,7 @@ class EyeToHandCalibrator:
         R_final = self._quaternion_to_rotation_matrix(weighted_sum)
         
         return R_final
-    
-    def test_calibration(self) -> bool:
-        """
-        캘리브레이션 결과를 테스트합니다.
-        """
-        print("\n=== Eye-to-Hand 캘리브레이션 테스트 ===")
-        
-        try:
-            # 캘리브레이션 결과 로드
-            result_path = self.save_dir / "cam2base.json"
-            if not result_path.exists():
-                print("캘리브레이션 결과 파일이 없습니다.")
-                return False
-            
-            with open(result_path, 'r') as f:
-                calibration_data = json.load(f)
-            
-            R_cam2base = np.array(calibration_data["R_cam2base"])
-            t_cam2base = np.array(calibration_data["t_cam2base"])  # 미터 단위
-            
-            print("캘리브레이션 결과:")
-            print(f"R_cam2base:\n{R_cam2base}")
-            
-            # 좌표축 변환 정보 확인
-            if "coordinate_transformation" in calibration_data:
-                coord_info = calibration_data["coordinate_transformation"]
-                if coord_info.get("applied", False):
-                    print(f"\n좌표축 변환 적용됨:")
-                    print(f"설명: {coord_info['description']}")
-                    if "transformation_matrix" in coord_info:
-                        print(f"변환 행렬:\n{np.array(coord_info['transformation_matrix'])}")
-                else:
-                    print(f"\n좌표축 변환 미적용:")
-                    print(f"설명: {coord_info['description']}")
-            
-            # 품질 가중치 정보 확인
-            if "quality_weighting" in calibration_data:
-                quality_info = calibration_data["quality_weighting"]
-                if quality_info.get("applied", False):
-                    print(f"\n품질 가중치 적용됨:")
-                    print(f"설명: {quality_info['description']}")
-                    
-                    # 가중치 정보 표시
-                    weights = quality_info.get("weights", [])
-                    quality_scores = quality_info.get("quality_scores", [])
-                    
-                    if weights and quality_scores:
-                        print(f"품질 점수 및 가중치:")
-                        for i, (score, weight) in enumerate(zip(quality_scores, weights)):
-                            print(f"  포즈 {i+1}: 품질={score:.3f}, 가중치={weight:.3f}")
-                else:
-                    print(f"\n품질 가중치 미적용")
-            
-            # t_cam2base 단위 확인
-            t_cam2base_norm = np.linalg.norm(t_cam2base)
-            print(f"\nt_cam2base 크기 (m): {t_cam2base_norm:.3f}")
-            
-            # numpy 배열을 안전하게 float로 변환
-            t_x = float(t_cam2base.flatten()[0])
-            t_y = float(t_cam2base.flatten()[1])
-            t_z = float(t_cam2base.flatten()[2])
-            print(f"t_cam2base (m): [{t_x:.3f}, {t_y:.3f}, {t_z:.3f}]")
-            
-            # 테스트 이미지 캡처
-            print("\n테스트 이미지 캡처 중...")
-            color_path, depth_path, intrinsics_path = capture_d455_images(
-                save_dir=str(self.save_dir),
-                rgb_size=(848, 480),
-                depth_size=(848, 480)
-            )
-            
-            # 카메라 내부 파라미터 로드
-            camera_matrix, dist_coeffs = self._load_camera_intrinsics(intrinsics_path)
-            
-            # ChArUco 검출
-            image = cv2.imread(color_path)
-            charuco_pose = self.detect_charuco_pose(image, camera_matrix, dist_coeffs)
-            
-            if charuco_pose is None:
-                print("테스트에서 ChArUco 검출 실패")
-                return False
-            
-            rvec, tvec, _, _ = charuco_pose
-            
-            # 카메라 -> ChArUco 변환 (미터 단위)
-            R_cam2charuco, _ = cv2.Rodrigues(rvec)
-            t_cam2charuco = tvec  # 미터 단위
-            
-            # 현재 로봇 포즈 (베이스 -> Gripper)
-            robot_coords = self.robot.get_coords()
-            robot_position_mm = np.array(robot_coords[0:3])
-            robot_rotation_deg = np.array(robot_coords[3:6])
-            
-            # numpy 배열을 안전하게 float로 변환
-            robot_x = float(robot_position_mm.flatten()[0])
-            robot_y = float(robot_position_mm.flatten()[1])
-            robot_z = float(robot_position_mm.flatten()[2])
-            robot_rx = float(robot_rotation_deg.flatten()[0])
-            robot_ry = float(robot_rotation_deg.flatten()[1])
-            robot_rz = float(robot_rotation_deg.flatten()[2])
-            
-            print(f"\n실제 로봇 위치 (베이스 기준):")
-            print(f"End-Effector 위치: {robot_x:.1f}, {robot_y:.1f}, {robot_z:.1f}mm")
-            print(f"End-Effector 회전: {robot_rx:.1f}, {robot_ry:.1f}, {robot_rz:.1f}도")
-            
-            # 캘리브레이션을 통한 계산 (Eye-to-Hand 구조)
-            # 카메라 -> 로봇 베이스 변환을 사용하여 ChArUco 위치 계산
-            # 카메라에서 ChArUco까지의 변환을 로봇 베이스 기준으로 변환
-            charuco_in_base = R_cam2base @ t_cam2charuco + t_cam2base.reshape(3, 1)
-            charuco_in_base_mm = charuco_in_base.flatten() * 1000  # m -> mm (표시용)
-            
-            # numpy 배열을 안전하게 float로 변환
-            charuco_x = float(charuco_in_base_mm.flatten()[0])
-            charuco_y = float(charuco_in_base_mm.flatten()[1])
-            charuco_z = float(charuco_in_base_mm.flatten()[2])
-            
-            print(f"\n캘리브레이션을 통한 ChArUco 위치 계산:")
-            print(f"카메라에서 계산된 ChArUco 위치 (로봇 베이스 기준): {charuco_x:.1f}, {charuco_y:.1f}, {charuco_z:.1f}mm")
-            
-            # 거리 계산
-            distance = np.linalg.norm(charuco_in_base_mm)
-            distance_float = float(distance)
-            print(f"카메라에서 계산된 거리: {distance_float:.1f}mm")
-            
-            # 테스트 결과 출력
-            print(f"\n캘리브레이션 테스트 결과:")
-            print(f"카메라 -> 로봇 베이스 변환 행렬이 성공적으로 계산되었습니다.")
-            print(f"이제 카메라에서 감지된 객체의 픽셀 좌표를 로봇 베이스 기준 3D 좌표로 변환할 수 있습니다.")
-            
-            return True
-            
-        except Exception as e:
-            print(f"캘리브레이션 테스트 오류: {e}")
-            return False
-    
+
 
 
 def main():
@@ -1863,14 +1267,14 @@ def main():
     
     # 캘리브레이터 초기화 (실제 보드 크기에 맞춤)
     calibrator = EyeToHandCalibrator(
-        robot_port="/dev/ttyACM1",
+        robot_port="/dev/ttyACM0",
         robot_baud=115200,
-        save_dir="/home/ros/llm_robot/data/Calibration/Eye-to-Hand12",
+        save_dir="/home/ros/llm_robot/data/Calibration/Eye-to-Hand14",
         charuco_squares_x=7, 
-        charuco_squares_y=11,   
-        charuco_square_length=27.0, # mm (실제 측정값)
-        charuco_marker_length=16.0, # mm (실제 측정값)
-        min_charuco_corners=20,  # 최소 ChArUco 코너 개수 (더 완화)
+        charuco_squares_y=5,   
+        charuco_square_length=28.0, # mm (실제 측정값)
+        charuco_marker_length=14.0, # mm (실제 측정값)
+        min_charuco_corners=10,  # 최소 ChArUco 코너 개수 (더 완화)
         min_detection_confidence=0.2,  # 최소 검출 신뢰도 (더욱 완화)
         max_distance_threshold=0.7)  # 최대 거리 임계값 (미터)
     
@@ -1878,12 +1282,9 @@ def main():
     try:
         print("\n=== 캘리브레이션 옵션 ===")
         print("1. 실시간 각도 수집 모드 (카메라 화면 포함)")
-        print("2. 자동 캘리브레이션 모드 (저장된 각도 사용)")
-        print("3. 수동 캘리브레이션 모드 (기존 방식)")
-        print("4. 테스트만 실행")
-        print("5. 종료")
+        print("2. 종료")
         
-        choice = input("선택 (1/2/3/4): ").strip()
+        choice = input("선택 (1/2): ").strip()
         
         if choice == "1":
             # 실시간 각도 수집 모드 (카메라 화면 포함)
@@ -1900,44 +1301,10 @@ def main():
                 calibration_success = calibrator.calculate_transformation_matrix()
                 if calibration_success:
                     print("\n🎉 Eye-to-Hand 캘리브레이션 완료!")
-                    test_choice = input("\n캘리브레이션 테스트를 실행하시겠습니까? (y/n): ").lower().strip()
-                    if test_choice == 'y':
-                        calibrator.test_calibration()
                 else:
                     print("\n❌ 캘리브레이션 실패")
             else:
                 print("\n❌ 각도 수집 실패")
-                
-        elif choice == "2":
-            # 자동 캘리브레이션 모드
-            print("\n저장된 각도 데이터를 사용하여 자동 캘리브레이션을 시작합니다...")
-            calibration_success = calibrator.perform_automatic_calibration()
-            
-            if calibration_success:
-                print("\n�� Cam-to-Gripper 캘리브레이션 완료!")
-                test_choice = input("\n캘리브레이션 테스트를 실행하시겠습니까? (y/n): ").lower().strip()
-                if test_choice == 'y':
-                    calibrator.test_calibration()
-            else:
-                print("\n❌ 캘리브레이션 실패")
-                
-        elif choice == "3":
-            # 수동 캘리브레이션 모드 (기존 방식)
-            num_poses = int(input("\n캡처할 포즈 수를 입력하세요 (권장: 25-30): ") or "25")
-            print(f"\n{num_poses}개의 포즈로 수동 Eye-to-Hand 캘리브레이션을 시작합니다...")
-            calibration_success = calibrator.perform_manual_calibration(num_poses)
-            
-            if calibration_success:
-                print("\n🎉 Eye-to-Hand 캘리브레이션 완료!")
-                test_choice = input("\n캘리브레이션 테스트를 실행하시겠습니까? (y/n): ").lower().strip()
-                if test_choice == 'y':
-                    calibrator.test_calibration()
-            else:
-                print("\n❌ 캘리브레이션 실패")
-                
-        elif choice == "4":
-            # 테스트만 실행
-            calibrator.test_calibration()
         else:
             print("\n종료합니다.")
             
